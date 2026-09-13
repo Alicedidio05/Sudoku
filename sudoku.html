@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sudoku da tavolo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #12141c;
+    --panel: #1b1e29;
+    --panel-border: #2a2e3d;
+    --paper: #f4f0e4;
+    --paper-alt: #eae3d2;
+    --ink: #20232c;
+    --ink-soft: #565b6b;
+    --given: #20232c;
+    --user-num: #a9672c;
+    --accent: #c98a3e;
+    --accent-soft: rgba(201,138,62,0.18);
+    --line: #c9c2ab;
+    --line-thick: #20232c;
+    --conflict-bg: #e2685a;
+    --conflict-text: #4a1410;
+    --paper-text-dim: #8d8776;
+    --success: #5c8a5c;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: #e8e6df;
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+  }
+
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 20px;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 2.4rem;
+    margin: 0;
+    letter-spacing: -0.01em;
+    color: #f4f0e4;
+  }
+
+  .subtitle {
+    margin: 6px 0 0;
+    color: #8b8fa3;
+    font-size: 0.92rem;
+    max-width: 46ch;
+    line-height: 1.5;
+  }
+
+  .stats {
+    display: flex;
+    gap: 22px;
+    font-size: 0.9rem;
+    color: #9ba0b4;
+  }
+
+  .stats .stat b {
+    display: block;
+    font-family: 'Fraunces', serif;
+    font-size: 1.3rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .layout {
+    display: flex;
+    gap: 34px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  /* --- Board --- */
+
+  .board-shell {
+    background: var(--paper);
+    padding: 18px;
+    border-radius: 3px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+    position: relative;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
+    width: min(72vw, 500px);
+    height: min(72vw, 500px);
+    border: 2.5px solid var(--line-thick);
+    background: var(--paper);
+  }
+
+  .cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    cursor: pointer;
+    user-select: none;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(1.1rem, 3.4vw, 1.5rem);
+    font-weight: 500;
+    color: var(--given);
+    background: var(--paper);
+    transition: background-color 120ms ease;
+  }
+
+  .cell.thick-right { border-right: 2.5px solid var(--line-thick); }
+  .cell.thick-bottom { border-bottom: 2.5px solid var(--line-thick); }
+
+  .cell.given { font-weight: 700; color: var(--given); cursor: default; }
+  .cell.user-value { color: var(--user-num); font-weight: 600; }
+
+  .cell.peer { background: var(--paper-alt); }
+  .cell.same-value { background: var(--accent-soft); }
+  .cell.selected { background: #ddd0ab; }
+  .cell.selected.given { background: #ddd0ab; }
+
+  .cell.conflict {
+    background: var(--conflict-bg) !important;
+    color: var(--conflict-text) !important;
+  }
+
+  .cell:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    z-index: 2;
+  }
+
+  .notes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    width: 100%;
+    height: 100%;
+  }
+
+  .notes-grid span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.55rem, 1.6vw, 0.72rem);
+    color: var(--paper-text-dim);
+    font-weight: 500;
+  }
+
+  .notes-grid span.active { color: var(--ink-soft); font-weight: 700; }
+
+  .win-banner {
+    position: absolute;
+    inset: 18px;
+    background: rgba(244,240,228,0.97);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    padding: 20px;
+  }
+
+  .win-banner.show { display: flex; }
+
+  .win-banner h2 {
+    font-family: 'Fraunces', serif;
+    color: var(--ink);
+    margin: 0;
+    font-size: 1.6rem;
+  }
+
+  .win-banner p { margin: 0; color: var(--ink-soft); }
+
+  /* --- Side panel --- */
+
+  .panel {
+    flex: 1;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 16px 18px;
+  }
+
+  .card h3 {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    color: #8b8fa3;
+    font-weight: 500;
+    text-transform: none;
+  }
+
+  .segmented {
+    display: flex;
+    background: #12141c;
+    border-radius: 5px;
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .segmented button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: #9ba0b4;
+    padding: 8px 6px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .segmented button.active {
+    background: var(--accent);
+    color: #1c1204;
+    font-weight: 600;
+  }
+
+  button.primary {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 5px;
+    border: none;
+    background: var(--accent);
+    color: #1c1204;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: filter 120ms ease;
+  }
+
+  button.primary:hover { filter: brightness(1.08); }
+
+  .numpad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .numpad button {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 5px;
+    border: 1px solid var(--panel-border);
+    background: #12141c;
+    color: #e8e6df;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .numpad button:hover { border-color: var(--accent); }
+
+  .numpad button .rem {
+    position: absolute;
+    bottom: 2px;
+    right: 5px;
+    font-size: 0.55rem;
+    color: #6b7086;
+    font-weight: 400;
+  }
+
+  .numpad button.erase {
+    grid-column: span 1;
+    color: #c98a3e;
+    font-size: 0.85rem;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .pencil-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--panel-border);
+    background: #12141c;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .pencil-toggle.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .pencil-toggle .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #3a3f52;
+    flex-shrink: 0;
+  }
+
+  .pencil-toggle.active .dot { background: var(--accent); }
+
+  .pencil-toggle span.label { font-size: 0.88rem; color: #cfd2de; }
+
+  .hint {
+    font-size: 0.78rem;
+    color: #6b7086;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  kbd {
+    background: #12141c;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.72rem;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  @media (max-width: 620px) {
+    .layout { flex-direction: column; align-items: center; }
+    .board { width: 88vw; height: 88vw; }
+    .panel { width: 100%; max-width: 420px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Sudoku</h1>
+      <p class="subtitle">Difficoltà media e difficile, senza limite di errori. Segna le celle in conflitto e tieni traccia delle bozze con la matita.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Tempo</span><b id="timer">00:00</b></div>
+      <div class="stat"><span>Errori</span><b id="mistakes">0</b></div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <div class="board-shell">
+      <div class="board" id="board" role="grid" aria-label="Griglia sudoku"></div>
+      <div class="win-banner" id="winBanner">
+        <h2>Risolto</h2>
+        <p id="winDetail"></p>
+        <button class="primary" style="width:auto;padding:9px 22px;margin-top:6px;" onclick="newGame()">Nuova partita</button>
+      </div>
+    </div>
+
+    <div class="panel">
+
+      <div class="card">
+        <h3>Difficoltà</h3>
+        <div class="segmented">
+          <button id="diffMedio" class="active" onclick="setDifficulty('medio')">Medio</button>
+          <button id="diffDifficile" onclick="setDifficulty('difficile')">Difficile</button>
+        </div>
+        <button class="primary" onclick="newGame()">Nuova partita</button>
+      </div>
+
+      <div class="card">
+        <h3>Bozze</h3>
+        <div class="pencil-toggle" id="pencilToggle" onclick="toggleNotesMode()">
+          <span class="dot"></span>
+          <span class="label">Matita (note multiple per casella)</span>
+        </div>
+        <p class="hint">Con la matita attiva, i numeri che inserisci vengono aggiunti come piccole note grigie, invece di riempire la casella.</p>
+      </div>
+
+      <div class="card">
+        <h3>Inserisci</h3>
+        <div class="numpad" id="numpad"></div>
+      </div>
+
+      <div class="card">
+        <h3>Comandi da tastiera</h3>
+        <p class="hint">
+          Frecce per muoversi · <kbd>1</kbd>–<kbd>9</kbd> per inserire · <kbd>Backspace</kbd> per cancellare · <kbd>N</kbd> per la matita
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   GENERATORE SUDOKU
+   ========================================================= */
+
+function makeEmptyGrid(){
+  return Array.from({length:9}, () => Array(9).fill(0));
+}
+
+function shuffle(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function isSafe(grid, row, col, num){
+  for(let x = 0; x < 9; x++){
+    if(grid[row][x] === num || grid[x][col] === num) return false;
+  }
+  const br = row - (row % 3), bc = col - (col % 3);
+  for(let r = 0; r < 3; r++){
+    for(let c = 0; c < 3; c++){
+      if(grid[br + r][bc + c] === num) return false;
+    }
+  }
+  return true;
+}
+
+function fillGrid(grid){
+  for(let row = 0; row < 9; row++){
+    for(let col = 0; col < 9; col++){
+      if(grid[row][col] === 0){
+        const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+        for(const num of nums){
+          if(isSafe(grid, row, col, num)){
+            grid[row][col] = num;
+            if(fillGrid(grid)) return true;
+            grid[row][col] = 0;
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Conta le soluzioni fino a "limit" (usato solo per verificare l'unicità)
+function countSolutions(grid, limit = 2){
+  let count = 0;
+  const g = grid.map(r => r.slice());
+
+  function solve(){
+    if(count >= limit) return;
+    for(let row = 0; row < 9; row++){
+      for(let col = 0; col < 9; col++){
+        if(g[row][col] === 0){
+          for(let num = 1; num <= 9; num++){
+            if(isSafe(g, row, col, num)){
+              g[row][col] = num;
+              solve();
+              g[row][col] = 0;
+              if(count >= limit) return;
+            }
+          }
+          return;
+        }
+      }
+    }
+    count++;
+  }
+
+  solve();
+  return count;
+}
+
+const DIFFICULTY_CLUES = {
+  medio: 36,
+  difficile: 30
+};
+
+function makePuzzle(difficulty){
+  const solution = makeEmptyGrid();
+  fillGrid(solution);
+
+  const puzzle = solution.map(r => r.slice());
+  const targetClues = DIFFICULTY_CLUES[difficulty] || 34;
+  const cellsToRemove = 81 - targetClues;
+
+  const positions = shuffle([...Array(81).keys()]);
+  let removed = 0;
+
+  for(const pos of positions){
+    if(removed >= cellsToRemove) break;
+    const row = Math.floor(pos / 9), col = pos % 9;
+    if(puzzle[row][col] === 0) continue;
+
+    const backup = puzzle[row][col];
+    puzzle[row][col] = 0;
+
+    const copy = puzzle.map(r => r.slice());
+    if(countSolutions(copy, 2) !== 1){
+      puzzle[row][col] = backup; // non univoca: ripristina
+    } else {
+      removed++;
+    }
+  }
+
+  return { puzzle, solution };
+}
+
+/* =========================================================
+   STATO DI GIOCO
+   ========================================================= */
+
+let state = {
+  given: [],
+  solution: [],
+  board: [],
+  notes: [],
+  selected: null,
+  notesMode: false,
+  mistakes: 0,
+  startTime: null,
+  timerHandle: null,
+  finished: false,
+  difficulty: 'medio'
+};
+
+const boardEl = document.getElementById('board');
+const timerEl = document.getElementById('timer');
+const mistakesEl = document.getElementById('mistakes');
+const winBanner = document.getElementById('winBanner');
+const winDetail = document.getElementById('winDetail');
+
+function newGame(){
+  const { puzzle, solution } = makePuzzle(state.difficulty);
+  state.given = puzzle.map(r => r.slice());
+  state.solution = solution;
+  state.board = puzzle.map(r => r.slice());
+  state.notes = Array.from({length:9}, () => Array.from({length:9}, () => new Set()));
+  state.selected = null;
+  state.mistakes = 0;
+  state.finished = false;
+  winBanner.classList.remove('show');
+  mistakesEl.textContent = '0';
+
+  clearInterval(state.timerHandle);
+  state.startTime = Date.now();
+  state.timerHandle = setInterval(updateTimer, 1000);
+  updateTimer();
+
+  buildBoardDOM();
+  render();
+}
+
+function setDifficulty(level){
+  state.difficulty = level;
+  document.getElementById('diffMedio').classList.toggle('active', level === 'medio');
+  document.getElementById('diffDifficile').classList.toggle('active', level === 'difficile');
+  newGame();
+}
+
+function updateTimer(){
+  if(state.finished) return;
+  const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  timerEl.textContent = `${m}:${s}`;
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+
+function buildBoardDOM(){
+  boardEl.innerHTML = '';
+  for(let row = 0; row < 9; row++){
+    for(let col = 0; col < 9; col++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = row;
+      cell.dataset.col = col;
+      cell.tabIndex = 0;
+      if((col + 1) % 3 === 0 && col !== 8) cell.classList.add('thick-right');
+      if((row + 1) % 3 === 0 && row !== 8) cell.classList.add('thick-bottom');
+      cell.addEventListener('click', () => selectCell(row, col));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function computeConflicts(board){
+  const conflicts = new Set();
+
+  function scanLine(cells){
+    const seen = {};
+    for(const [r, c] of cells){
+      const v = board[r][c];
+      if(v === 0) continue;
+      const key = r + ',' + c;
+      if(seen[v] !== undefined){
+        conflicts.add(seen[v]);
+        conflicts.add(key);
+      } else {
+        seen[v] = key;
+      }
+    }
+  }
+
+  for(let r = 0; r < 9; r++) scanLine(Array.from({length:9}, (_, c) => [r, c]));
+  for(let c = 0; c < 9; c++) scanLine(Array.from({length:9}, (_, r) => [r, c]));
+  for(let br = 0; br < 9; br += 3){
+    for(let bc = 0; bc < 9; bc += 3){
+      const cells = [];
+      for(let r = br; r < br + 3; r++) for(let c = bc; c < bc + 3; c++) cells.push([r, c]);
+      scanLine(cells);
+    }
+  }
+
+  return conflicts;
+}
+
+function render(){
+  const conflicts = computeConflicts(state.board);
+  const sel = state.selected;
+  const selectedValue = sel ? state.board[sel.row][sel.col] : 0;
+
+  document.querySelectorAll('.cell').forEach(cellEl => {
+    const row = Number(cellEl.dataset.row), col = Number(cellEl.dataset.col);
+    const value = state.board[row][col];
+    const isGiven = state.given[row][col] !== 0;
+    const key = row + ',' + col;
+
+    cellEl.classList.toggle('given', isGiven);
+    cellEl.classList.toggle('user-value', !isGiven && value !== 0);
+    cellEl.classList.toggle('conflict', conflicts.has(key));
+
+    cellEl.classList.toggle('selected', !!sel && sel.row === row && sel.col === col);
+
+    const inPeerZone = !!sel && (
+      sel.row === row || sel.col === col ||
+      (Math.floor(sel.row/3) === Math.floor(row/3) && Math.floor(sel.col/3) === Math.floor(col/3))
+    );
+    cellEl.classList.toggle('peer', inPeerZone && !(sel.row === row && sel.col === col));
+    cellEl.classList.toggle('same-value', selectedValue !== 0 && value === selectedValue && !(sel.row === row && sel.col === col));
+
+    if(value !== 0){
+      cellEl.innerHTML = '';
+      cellEl.textContent = value;
+    } else {
+      const noteSet = state.notes[row][col];
+      if(noteSet.size === 0){
+        cellEl.innerHTML = '';
+      } else {
+        let html = '<div class="notes-grid">';
+        for(let n = 1; n <= 9; n++){
+          html += `<span class="${noteSet.has(n) ? 'active' : ''}">${noteSet.has(n) ? n : ''}</span>`;
+        }
+        html += '</div>';
+        cellEl.innerHTML = html;
+      }
+    }
+  });
+
+  renderNumpad();
+}
+
+function renderNumpad(){
+  const counts = Array(10).fill(0);
+  for(let r = 0; r < 9; r++) for(let c = 0; c < 9; c++){
+    const v = state.board[r][c];
+    if(v !== 0) counts[v]++;
+  }
+
+  const numpad = document.getElementById('numpad');
+  numpad.innerHTML = '';
+  for(let n = 1; n <= 9; n++){
+    const btn = document.createElement('button');
+    const remaining = Math.max(0, 9 - counts[n]);
+    btn.innerHTML = `${n}<span class="rem">${remaining}</span>`;
+    btn.addEventListener('click', () => inputNumber(n));
+    numpad.appendChild(btn);
+  }
+  const erase = document.createElement('button');
+  erase.className = 'erase';
+  erase.textContent = '⌫';
+  erase.addEventListener('click', eraseSelected);
+  numpad.appendChild(erase);
+}
+
+/* =========================================================
+   INTERAZIONE
+   ========================================================= */
+
+function selectCell(row, col){
+  state.selected = { row, col };
+  render();
+}
+
+function toggleNotesMode(){
+  state.notesMode = !state.notesMode;
+  document.getElementById('pencilToggle').classList.toggle('active', state.notesMode);
+}
+
+function canPlace(board, row, col, num){
+  for(let x = 0; x < 9; x++){
+    if(x !== col && board[row][x] === num) return false;
+    if(x !== row && board[x][col] === num) return false;
+  }
+  const br = row - (row % 3), bc = col - (col % 3);
+  for(let r = 0; r < 3; r++){
+    for(let c = 0; c < 3; c++){
+      const rr = br + r, cc = bc + c;
+      if((rr !== row || cc !== col) && board[rr][cc] === num) return false;
+    }
+  }
+  return true;
+}
+
+function cleanNotesAround(row, col, num){
+  const clear = (r, c) => state.notes[r][c].delete(num);
+  for(let x = 0; x < 9; x++){ clear(row, x); clear(x, col); }
+  const br = row - (row % 3), bc = col - (col % 3);
+  for(let r = 0; r < 3; r++) for(let c = 0; c < 3; c++) clear(br + r, bc + c);
+}
+
+function inputNumber(num){
+  if(state.finished || !state.selected) return;
+  const { row, col } = state.selected;
+  if(state.given[row][col] !== 0) return;
+
+  if(state.notesMode){
+    if(state.board[row][col] !== 0) return; // solo su celle vuote
+    const set = state.notes[row][col];
+    if(set.has(num)) set.delete(num); else set.add(num);
+    render();
+    return;
+  }
+
+  if(state.board[row][col] === num){
+    state.board[row][col] = 0; // premere di nuovo lo stesso numero lo rimuove
+    render();
+    return;
+  }
+
+  const wasSafe = canPlace(state.board, row, col, num);
+  state.board[row][col] = num;
+  state.notes[row][col].clear();
+  cleanNotesAround(row, col, num);
+
+  if(!wasSafe){
+    state.mistakes++;
+    mistakesEl.textContent = state.mistakes;
+  }
+
+  checkWin();
+  render();
+}
+
+function eraseSelected(){
+  if(state.finished || !state.selected) return;
+  const { row, col } = state.selected;
+  if(state.given[row][col] !== 0) return;
+  state.board[row][col] = 0;
+  state.notes[row][col].clear();
+  render();
+}
+
+function checkWin(){
+  for(let r = 0; r < 9; r++){
+    for(let c = 0; c < 9; c++){
+      if(state.board[r][c] !== state.solution[r][c]) return;
+    }
+  }
+  state.finished = true;
+  clearInterval(state.timerHandle);
+  winDetail.textContent = `Tempo: ${timerEl.textContent} · Errori: ${state.mistakes}`;
+  winBanner.classList.add('show');
+}
+
+/* Tastiera */
+document.addEventListener('keydown', (e) => {
+  if(!state.selected){
+    if(e.key >= '1' && e.key <= '9'){ /* nessuna cella selezionata */ }
+    return;
+  }
+  let { row, col } = state.selected;
+
+  if(e.key >= '1' && e.key <= '9'){
+    inputNumber(Number(e.key));
+    e.preventDefault();
+    return;
+  }
+  if(e.key === 'Backspace' || e.key === 'Delete' || e.key === '0'){
+    eraseSelected();
+    e.preventDefault();
+    return;
+  }
+  if(e.key.toLowerCase() === 'n'){
+    toggleNotesMode();
+    e.preventDefault();
+    return;
+  }
+  if(e.key === 'ArrowUp')    { row = Math.max(0, row - 1); selectCell(row, col); e.preventDefault(); }
+  if(e.key === 'ArrowDown')  { row = Math.min(8, row + 1); selectCell(row, col); e.preventDefault(); }
+  if(e.key === 'ArrowLeft')  { col = Math.max(0, col - 1); selectCell(row, col); e.preventDefault(); }
+  if(e.key === 'ArrowRight') { col = Math.min(8, col + 1); selectCell(row, col); e.preventDefault(); }
+});
+
+/* Avvio */
+newGame();
+</script>
+</body>
+</html>
